@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PDF RAG Search</title>
+</head>
+<body>
+<h2>Загрузите PDF и задайте вопрос</h2>
+
+<form action="/ask" method="post" enctype="multipart/form-data">
+    <input type="file" name="file" required><br><br>
+    <input type="text" name="question" placeholder="Ваш вопрос" required><br><br>
+    <button type="submit">Спросить</button>
+</form>
+
+{% if error %}
+<hr>
+<h3 style="color: red;">Ошибка:</h3>
+<p style="color: red;">{{ error }}</p>
+{% endif %}
+
+{% if answer %}
+<hr>
+<h3>Ответ:</h3>
+<p>{{ answer }}</p>
+{% endif %}
+
+</body>
+</html>
