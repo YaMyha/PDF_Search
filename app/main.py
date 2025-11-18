@@ -6,7 +6,7 @@ from fastapi.templating import Jinja2Templates
 from app.rag import build_rag, answer_question
 
 app = FastAPI()
-templates = Jinja2Templates(directory="templates")
+templates = Jinja2Templates(directory="app/templates")
 
 
 @app.get("/", response_class=HTMLResponse)
