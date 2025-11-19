@@ -5,9 +5,11 @@ from langchain_community.vectorstores import Chroma
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from dotenv import load_dotenv
 import os
+import uuid
 
 # Load environment variables at module level
 load_dotenv()
+CHROMA_PATH = "data/chroma"
 
 def get_api_key():
     """Get OpenAI API key from environment variable"""
@@ -17,6 +19,20 @@ def get_api_key():
             "OPENAI_API_KEY not found. Please set it in your .env file or as an environment variable."
         )
     return api_key
+
+# Write chroma to the disk
+def get_chroma(collection_name):
+    api_key = get_api_key()
+    return Chroma(collection_name=collection_name,
+                  embedding_function=OpenAIEmbeddings(api_key=api_key),
+                  persist_directory=CHROMA_PATH)
+
+def save_pdf(pdf_bytes):
+    doc_id = str(uuid.uuid4())
+    path = f"data/pdf/{doc_id}.pdf"
+    with open(path, "wb") as f:
+        f.write(pdf_bytes)
+    return doc_id, path
 
 def build_rag(pdf_file):
     # Validate PDF file is not empty

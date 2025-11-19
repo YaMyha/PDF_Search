@@ -1,28 +1,195 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>PDF RAG Search</title>
-</head>
-<body>
-<h2>Загрузите PDF и задайте вопрос</h2>
+{% extends "base.html" %}
 
-<form action="/ask" method="post" enctype="multipart/form-data">
-    <input type="file" name="file" required><br><br>
-    <input type="text" name="question" placeholder="Ваш вопрос" required><br><br>
-    <button type="submit">Спросить</button>
-</form>
+{% block title %}PDF Search · Workspace{% endblock %}
 
-{% if error %}
-<hr>
-<h3 style="color: red;">Ошибка:</h3>
-<p style="color: red;">{{ error }}</p>
-{% endif %}
+{% block content %}
+<section class="panel">
+    <div class="badge">How it works</div>
+    <h2>Ingest PDF knowledge & start chatting</h2>
+    <p>First upload a PDF. We split the document into vector embeddings, store them inside ChromaDB, then you can ask grounded questions about the content.</p>
+    <ul class="steps">
+        <li><strong>1.</strong> Upload a PDF file (max size depends on server settings).</li>
+        <li><strong>2.</strong> Keep the returned document ID handy.</li>
+        <li><strong>3.</strong> Ask questions referencing that ID.</li>
+    </ul>
+</section>
 
-{% if answer %}
-<hr>
-<h3>Ответ:</h3>
-<p>{{ answer }}</p>
-{% endif %}
+<section class="grid">
+    <div class="panel">
+        <div class="badge">Step 1 · Upload</div>
+        <h2>Send a PDF to the API</h2>
+        <form id="upload-form" enctype="multipart/form-data">
+            <label for="file-input">Choose or drop a PDF</label>
+            <label class="file-input" id="file-drop">
+                <input type="file" id="file-input" accept="application/pdf" required />
+                <span id="file-label">Drag & drop or click to select</span>
+            </label>
+            <button type="submit" id="upload-btn">Upload PDF</button>
+        </form>
+        <div id="upload-status" class="status" hidden></div>
+    </div>
 
-</body>
-</html>
+    <div class="panel">
+        <div class="badge">Step 2 · Ask</div>
+        <h2>Query your document</h2>
+        <form id="ask-form">
+            <label for="doc-id">Document ID</label>
+            <input type="text" id="doc-id" placeholder="e.g. 42" autocomplete="off" required />
+
+            <label for="question">Your question</label>
+            <textarea id="question" placeholder="What does section 3 describe?" required></textarea>
+
+            <button type="submit" id="ask-btn">Ask the model</button>
+        </form>
+        <div id="ask-status" class="status" hidden></div>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const uploadForm = document.getElementById("upload-form");
+    const fileInput = document.getElementById("file-input");
+    const fileDrop = document.getElementById("file-drop");
+    const fileLabel = document.getElementById("file-label");
+    const uploadBtn = document.getElementById("upload-btn");
+    const uploadStatus = document.getElementById("upload-status");
+
+    const askForm = document.getElementById("ask-form");
+    const docIdInput = document.getElementById("doc-id");
+    const questionInput = document.getElementById("question");
+    const askBtn = document.getElementById("ask-btn");
+    const askStatus = document.getElementById("ask-status");
+    const clearCacheBtn = document.getElementById("clear-cache");
+
+    const LAST_DOC_KEY = "pdf-search:last-doc-id";
+
+    function setStatus(el, message, type = "neutral") {
+        if (!el) return;
+        el.hidden = false;
+        el.classList.remove("success", "error");
+        if (type === "success") el.classList.add("success");
+        if (type === "error") el.classList.add("error");
+        el.textContent = message;
+    }
+
+    function resetStatus(el) {
+        if (!el) return;
+        el.hidden = true;
+        el.textContent = "";
+        el.classList.remove("success", "error");
+    }
+
+    function setDocId(id) {
+        docIdInput.value = id;
+        localStorage.setItem(LAST_DOC_KEY, id);
+    }
+
+    function restoreDocId() {
+        const cached = localStorage.getItem(LAST_DOC_KEY);
+        if (cached) docIdInput.value = cached;
+    }
+
+    restoreDocId();
+
+    clearCacheBtn?.addEventListener("click", () => {
+        localStorage.removeItem(LAST_DOC_KEY);
+        docIdInput.value = "";
+        resetStatus(askStatus);
+        setStatus(uploadStatus, "Stored document ID cleared.", "success");
+        setTimeout(() => resetStatus(uploadStatus), 3000);
+    });
+
+    ["dragenter", "dragover"].forEach(evt => {
+        fileDrop.addEventListener(evt, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            fileDrop.classList.add("dragover");
+        });
+    });
+
+    ["dragleave", "drop"].forEach(evt => {
+        fileDrop.addEventListener(evt, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (evt === "drop" && e.dataTransfer?.files?.length) {
+                fileInput.files = e.dataTransfer.files;
+                fileLabel.textContent = e.dataTransfer.files[0].name;
+            }
+            fileDrop.classList.remove("dragover");
+        });
+    });
+
+    fileInput.addEventListener("change", () => {
+        fileLabel.textContent = fileInput.files.length ? fileInput.files[0].name : "Drag & drop or click to select";
+    });
+
+    uploadForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        resetStatus(uploadStatus);
+
+        if (!fileInput.files.length) {
+            setStatus(uploadStatus, "Please choose a PDF file first.", "error");
+            return;
+        }
+
+        uploadBtn.disabled = true;
+        setStatus(uploadStatus, "Uploading…", "neutral");
+
+        const formData = new FormData();
+        formData.append("file", fileInput.files[0]);
+
+        try {
+            const response = await fetch("/upload", {
+                method: "POST",
+                body: formData
+            });
+
+            const data = await response.json();
+            if (data.status === "error") {
+                throw new Error(data.details || "Upload failed.");
+            }
+
+            setStatus(uploadStatus, `Success! Document ID: ${data.doc_id}`, "success");
+            setDocId(data.doc_id);
+        } catch (error) {
+            setStatus(uploadStatus, error.message || "Unexpected error.", "error");
+        } finally {
+            uploadBtn.disabled = false;
+        }
+    });
+
+    askForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        resetStatus(askStatus);
+
+        const docId = docIdInput.value.trim();
+        const question = questionInput.value.trim();
+
+        if (!docId || !question) {
+            setStatus(askStatus, "Both document ID and question are required.", "error");
+            return;
+        }
+
+        askBtn.disabled = true;
+        setStatus(askStatus, "Thinking…", "neutral");
+
+        try {
+            const query = new URLSearchParams({ doc_id: docId, question }).toString();
+            const response = await fetch(`/ask?${query}`, { method: "POST" });
+            const data = await response.json();
+
+            if (data.status === "error") {
+                throw new Error(data.details || "Unable to get answer.");
+            }
+
+            setStatus(askStatus, data.answer || "No answer returned.", "success");
+            setDocId(docId);
+        } catch (error) {
+            setStatus(askStatus, error.message || "Unexpected error.", "error");
+        } finally {
+            askBtn.disabled = false;
+        }
+    });
+</script>
+{% endblock %}
