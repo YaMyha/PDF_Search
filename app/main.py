@@ -4,6 +4,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from starlette.responses import JSONResponse
 
 from app.models import SessionLocal, Document
 from app.rag import build_rag, answer_question, save_pdf, get_chroma
@@ -51,7 +52,7 @@ async def upload(file: UploadFile):
     return {"doc_id": doc_id, "status": "Success!"}
 
 
-@app.post("/ask", response_class=HTMLResponse)
+@app.post("/ask", response_class=JSONResponse)
 async def ask(doc_id: str, question: str):
     db = SessionLocal()
     doc = db.query(Document).filter(Document.id == doc_id).first()
