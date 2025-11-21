@@ -228,6 +228,60 @@
             color: rgba(226,232,240,0.55);
         }
 
+        input[type="password"],
+        input[type="email"] {
+            width: 100%;
+            border: 1px solid rgba(148,163,184,0.25);
+            border-radius: 16px;
+            padding: 14px 16px;
+            background: rgba(15,23,42,0.6);
+            color: var(--text);
+            font-size: 1rem;
+            transition: border 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        input[type="password"]:focus,
+        input[type="email"]:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(56,189,248,0.3);
+        }
+
+        .auth-tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 24px;
+        }
+
+        .auth-tab {
+            flex: 1;
+            padding: 12px 16px;
+            border: 1px solid rgba(148,163,184,0.25);
+            background: rgba(15,23,42,0.4);
+            color: var(--text);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-weight: 600;
+        }
+
+        .auth-tab:hover {
+            border-color: var(--accent);
+            background: rgba(56,189,248,0.1);
+        }
+
+        .auth-tab.active {
+            background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+            color: var(--text-dark);
+            border-color: transparent;
+        }
+
+        .auth-form {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
         @media (max-width: 640px) {
             header {
                 flex-direction: column;

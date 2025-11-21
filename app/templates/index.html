@@ -3,7 +3,43 @@
 {% block title %}PDF Search · Workspace{% endblock %}
 
 {% block content %}
-<section class="panel">
+<!-- Authentication Section -->
+<section id="auth-section" class="panel">
+    <div class="badge">Authentication</div>
+    <h2>Login or Register</h2>
+    <div class="auth-tabs">
+        <button class="auth-tab active" data-tab="login">Login</button>
+        <button class="auth-tab" data-tab="register">Register</button>
+    </div>
+    
+    <form id="login-form" class="auth-form">
+        <label for="login-username">Username</label>
+        <input type="text" id="login-username" placeholder="Enter your username" required />
+        
+        <label for="login-password">Password</label>
+        <input type="password" id="login-password" placeholder="Enter your password" required />
+        
+        <button type="submit">Login</button>
+    </form>
+    
+    <form id="register-form" class="auth-form" hidden>
+        <label for="register-username">Username</label>
+        <input type="text" id="register-username" placeholder="Choose a username" required />
+        
+        <label for="register-email">Email</label>
+        <input type="email" id="register-email" placeholder="Enter your email" required />
+        
+        <label for="register-password">Password</label>
+        <input type="password" id="register-password" placeholder="Choose a password (min 8 characters)" required />
+        
+        <button type="submit">Register</button>
+    </form>
+    
+    <div id="auth-status" class="status" hidden></div>
+</section>
+
+<!-- Main Application Section (hidden until authenticated) -->
+<section id="app-section" class="panel" hidden>
     <div class="badge">How it works</div>
     <h2>Ingest PDF knowledge & start chatting</h2>
     <p>First upload a PDF. We split the document into vector embeddings, store them inside ChromaDB, then you can ask grounded questions about the content.</p>
@@ -14,7 +50,7 @@
     </ul>
 </section>
 
-<section class="grid">
+<section id="main-section" class="grid" hidden>
     <div class="panel">
         <div class="badge">Step 1 · Upload</div>
         <h2>Send a PDF to the API</h2>
@@ -44,10 +80,34 @@
         <div id="ask-status" class="status" hidden></div>
     </div>
 </section>
+
+<!-- User Info Section -->
+<section id="user-section" class="panel" hidden>
+    <div class="badge">Your Account</div>
+    <h2>Welcome, <span id="user-name"></span>!</h2>
+    <p>You can now upload and query your own documents.</p>
+    <button type="button" id="logout-btn" class="secondary">Logout</button>
+</section>
 {% endblock %}
 
 {% block scripts %}
 <script>
+    // Authentication state
+    const TOKEN_KEY = "pdf-search:auth-token";
+    const USER_KEY = "pdf-search:user";
+    
+    // DOM elements
+    const authSection = document.getElementById("auth-section");
+    const appSection = document.getElementById("app-section");
+    const mainSection = document.getElementById("main-section");
+    const userSection = document.getElementById("user-section");
+    const loginForm = document.getElementById("login-form");
+    const registerForm = document.getElementById("register-form");
+    const authTabs = document.querySelectorAll(".auth-tab");
+    const authStatus = document.getElementById("auth-status");
+    const userNameSpan = document.getElementById("user-name");
+    const logoutBtn = document.getElementById("logout-btn");
+    
     const uploadForm = document.getElementById("upload-form");
     const fileInput = document.getElementById("file-input");
     const fileDrop = document.getElementById("file-drop");
@@ -63,6 +123,189 @@
     const clearCacheBtn = document.getElementById("clear-cache");
 
     const LAST_DOC_KEY = "pdf-search:last-doc-id";
+    
+    // Authentication functions
+    function getAuthToken() {
+        const token = localStorage.getItem(TOKEN_KEY);
+        return token ? token.trim() : null;
+    }
+    
+    function setAuthToken(token) {
+        localStorage.setItem(TOKEN_KEY, token ? token.trim() : "");
+    }
+    
+    function clearAuth() {
+        localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(USER_KEY);
+    }
+    
+    function getAuthHeaders() {
+        const token = getAuthToken();
+        return token ? { "Authorization": `Bearer ${token}` } : {};
+    }
+    
+    function showAuth() {
+        authSection.hidden = false;
+        appSection.hidden = true;
+        mainSection.hidden = true;
+        userSection.hidden = true;
+    }
+    
+    function showApp() {
+        authSection.hidden = true;
+        appSection.hidden = false;
+        mainSection.hidden = false;
+        userSection.hidden = false;
+    }
+    
+    function checkAuth() {
+        const token = getAuthToken();
+        if (token) {
+            // Verify token by fetching user info
+            fetch("/me", { headers: getAuthHeaders() })
+                .then(res => {
+                    if (res.ok) {
+                        return res.json();
+                    } else {
+                        clearAuth();
+                        showAuth();
+                        throw new Error("Invalid token");
+                    }
+                })
+                .then(user => {
+                    localStorage.setItem(USER_KEY, JSON.stringify(user));
+                    userNameSpan.textContent = user.username;
+                    showApp();
+                })
+                .catch(() => {
+                    showAuth();
+                });
+        } else {
+            showAuth();
+        }
+    }
+    
+    // Auth tab switching
+    authTabs.forEach(tab => {
+        tab.addEventListener("click", () => {
+            const tabName = tab.dataset.tab;
+            authTabs.forEach(t => t.classList.remove("active"));
+            tab.classList.add("active");
+            
+            if (tabName === "login") {
+                loginForm.hidden = false;
+                registerForm.hidden = true;
+            } else {
+                loginForm.hidden = true;
+                registerForm.hidden = false;
+            }
+            resetStatus(authStatus);
+        });
+    });
+    
+    // Login form
+    loginForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        resetStatus(authStatus);
+        
+        const formData = new FormData();
+        formData.append("username", document.getElementById("login-username").value);
+        formData.append("password", document.getElementById("login-password").value);
+        
+        try {
+            const response = await fetch("/login", {
+                method: "POST",
+                body: formData
+            });
+            
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.detail || "Login failed");
+            }
+            
+            const data = await response.json();
+            console.log("Login response:", data); // Debug log
+            
+            if (!data.access_token) {
+                throw new Error("No access token in response");
+            }
+            
+            setAuthToken(data.access_token);
+            console.log("Token stored:", getAuthToken()); // Debug log
+            
+            // Fetch user info after storing token
+            const headers = getAuthHeaders();
+            console.log("Headers for /me:", headers); // Debug log
+            
+            const userResponse = await fetch("/me", { headers: headers });
+            console.log("/me response status:", userResponse.status); // Debug log
+            
+            if (userResponse.ok) {
+                const user = await userResponse.json();
+                localStorage.setItem(USER_KEY, JSON.stringify(user));
+                userNameSpan.textContent = user.username;
+                showApp();
+                setStatus(authStatus, "Login successful!", "success");
+            } else {
+                // Token validation failed
+                const errorText = await userResponse.text();
+                console.error("/me error response:", errorText); // Debug log
+                clearAuth();
+                let error;
+                try {
+                    error = JSON.parse(errorText);
+                } catch (e) {
+                    error = { detail: "Token validation failed" };
+                }
+                throw new Error(error.detail || "Token validation failed");
+            }
+        } catch (error) {
+            console.error("Login error:", error); // Debug log
+            setStatus(authStatus, error.message || "Login failed", "error");
+        }
+    });
+    
+    // Register form
+    registerForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        resetStatus(authStatus);
+        
+        const userData = {
+            username: document.getElementById("register-username").value,
+            email: document.getElementById("register-email").value,
+            password: document.getElementById("register-password").value
+        };
+        
+        try {
+            const response = await fetch("/register", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(userData)
+            });
+            
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.detail || "Registration failed");
+            }
+            
+            setStatus(authStatus, "Registration successful! Please login.", "success");
+            // Switch to login tab
+            document.querySelector('.auth-tab[data-tab="login"]').click();
+        } catch (error) {
+            setStatus(authStatus, error.message || "Registration failed", "error");
+        }
+    });
+    
+    // Logout
+    logoutBtn.addEventListener("click", () => {
+        clearAuth();
+        showAuth();
+        loginForm.reset();
+        registerForm.reset();
+    });
+    
+    // Initialize auth check
+    checkAuth();
 
     function setStatus(el, message, type = "neutral") {
         if (!el) return;
@@ -142,8 +385,15 @@
         try {
             const response = await fetch("/upload", {
                 method: "POST",
+                headers: getAuthHeaders(),
                 body: formData
             });
+            
+            if (response.status === 401) {
+                clearAuth();
+                showAuth();
+                throw new Error("Session expired. Please login again.");
+            }
 
             const data = await response.json();
             if (data.status === "error") {
@@ -176,7 +426,16 @@
 
         try {
             const query = new URLSearchParams({ doc_id: docId, question }).toString();
-            const response = await fetch(`/ask?${query}`, { method: "POST" });
+            const response = await fetch(`/ask?${query}`, {
+                method: "POST",
+                headers: getAuthHeaders()
+            });
+            
+            if (response.status === 401) {
+                clearAuth();
+                showAuth();
+                throw new Error("Session expired. Please login again.");
+            }
             const data = await response.json();
 
             if (data.status === "error") {

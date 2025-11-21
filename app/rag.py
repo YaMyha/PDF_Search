@@ -29,7 +29,9 @@ def get_chroma(collection_name):
 
 def save_pdf(pdf_bytes):
     doc_id = str(uuid.uuid4())
-    path = f"data/pdf/{doc_id}.pdf"
+    pdf_dir = "data/pdf"
+    os.makedirs(pdf_dir, exist_ok=True)
+    path = f"{pdf_dir}/{doc_id}.pdf"
     with open(path, "wb") as f:
         f.write(pdf_bytes)
     return doc_id, path
