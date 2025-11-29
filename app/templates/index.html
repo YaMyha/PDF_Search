@@ -185,6 +185,28 @@
         }
     }
     
+    // Initialize auth form visibility based on active tab
+    function initializeAuthForms() {
+        const activeTab = document.querySelector(".auth-tab.active");
+        if (activeTab) {
+            const tabName = activeTab.dataset.tab;
+            if (tabName === "login") {
+                loginForm.hidden = false;
+                registerForm.hidden = true;
+            } else {
+                loginForm.hidden = true;
+                registerForm.hidden = false;
+            }
+        } else {
+            // Default to login form if no active tab found
+            loginForm.hidden = false;
+            registerForm.hidden = true;
+        }
+    }
+    
+    // Initialize on page load
+    initializeAuthForms();
+    
     // Auth tab switching
     authTabs.forEach(tab => {
         tab.addEventListener("click", () => {
