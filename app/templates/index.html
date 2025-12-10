@@ -174,7 +174,8 @@
                 })
                 .then(user => {
                     localStorage.setItem(USER_KEY, JSON.stringify(user));
-                    userNameSpan.textContent = user.username;
+                    // Use textContent to prevent XSS (already safe, but being explicit)
+                    userNameSpan.textContent = user.username || '';
                     showApp();
                 })
                 .catch(() => {
@@ -265,7 +266,8 @@
             if (userResponse.ok) {
                 const user = await userResponse.json();
                 localStorage.setItem(USER_KEY, JSON.stringify(user));
-                userNameSpan.textContent = user.username;
+                // Use textContent to prevent XSS
+                userNameSpan.textContent = user.username || '';
                 showApp();
                 setStatus(authStatus, "Login successful!", "success");
             } else {
@@ -329,12 +331,20 @@
     // Initialize auth check
     checkAuth();
 
+    // Escape HTML to prevent XSS
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
     function setStatus(el, message, type = "neutral") {
         if (!el) return;
         el.hidden = false;
         el.classList.remove("success", "error");
         if (type === "success") el.classList.add("success");
         if (type === "error") el.classList.add("error");
+        // Use textContent which automatically escapes HTML
         el.textContent = message;
     }
 
@@ -422,7 +432,9 @@
                 throw new Error(data.details || "Upload failed.");
             }
 
-            setStatus(uploadStatus, `Success! Document ID: ${data.doc_id}`, "success");
+            // Escape user input to prevent XSS
+            const docId = String(data.doc_id || '').replace(/[<>&"']/g, '');
+            setStatus(uploadStatus, `Success! Document ID: ${docId}`, "success");
             setDocId(data.doc_id);
         } catch (error) {
             setStatus(uploadStatus, error.message || "Unexpected error.", "error");
@@ -464,7 +476,9 @@
                 throw new Error(data.details || "Unable to get answer.");
             }
 
-            setStatus(askStatus, data.answer || "No answer returned.", "success");
+            // Escape answer to prevent XSS (textContent in setStatus already handles this, but be safe)
+            const answer = String(data.answer || "No answer returned.");
+            setStatus(askStatus, answer, "success");
             setDocId(docId);
         } catch (error) {
             setStatus(askStatus, error.message || "Unexpected error.", "error");
